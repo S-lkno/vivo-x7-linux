@@ -55,6 +55,16 @@
  		pmi8950_wled: leds@d800 {
  			compatible = "qcom,pmi8950-wled";
  			reg = <0xd800>, <0xd900>;
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -127,6 +127,7 @@
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-sony-xperia-loire-suzu.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-xiaomi-kenzo.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-longcheer-l9360.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-vivo-pd1602.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-10.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-101.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-h815.dtb
 --- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
 +++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
 @@ -480,6 +480,9 @@
@@ -861,7 +871,7 @@
 +&soc {
 +	lpass: remoteproc@c200000 {
 +		compatible = "qcom,msm8953-adsp-pil";
-+		reg = <0x0c200000 0x100>;
++		reg = <0x04080000 0x100>;
 +
 +		interrupts-extended = <&intc GIC_SPI 293 IRQ_TYPE_EDGE_RISING>,
 +				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
@@ -1487,13 +1497,3 @@
 +MODULE_AUTHOR("Vivo X7 mainline port");
 +MODULE_DESCRIPTION("DRM driver for mdss_dsi_d8064t_1080p_cmd panel");
 +MODULE_LICENSE("GPL");
---- a/arch/arm64/boot/dts/qcom/Makefile
-+++ b/arch/arm64/boot/dts/qcom/Makefile
-@@ -127,6 +127,7 @@
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-sony-xperia-loire-suzu.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-xiaomi-kenzo.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-longcheer-l9360.dtb
-+dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-vivo-pd1602.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-10.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-101.dtb
- dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-h815.dtb
