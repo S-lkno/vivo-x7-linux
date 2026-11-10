@@ -1,0 +1,1499 @@
+--- a/arch/arm64/boot/dts/qcom/msm8976.dtsi
++++ b/arch/arm64/boot/dts/qcom/msm8976.dtsi
+@@ -405,12 +405,12 @@
+ 		};
+ 
+ 		mpss_mem: mpss@86c00000 {
+-			reg = <0x0 0x86c00000 0x0 0x5600000>;
++			reg = <0x0 0x86c00000 0x0 0x3600000>;
+ 			no-map;
+ 		};
+ 
+-		lpass_mem: lpass@8c200000 {
+-			reg = <0x0 0x8c200000 0x0 0x1000000>;
++		lpass_mem: lpass@8a200000 {
++			reg = <0x0 0x8a200000 0x0 0x1400000>;
+ 			no-map;
+ 		};
+ 
+--- a/arch/arm64/boot/dts/qcom/pmi8950.dtsi
++++ b/arch/arm64/boot/dts/qcom/pmi8950.dtsi
+@@ -2,6 +2,7 @@
+ // Copyright (c) 2019, AngeloGioacchino Del Regno <kholk11@gmail.com>
+ 
+ #include <dt-bindings/iio/qcom,spmi-vadc.h>
++#include <dt-bindings/leds/common.h>
+ #include <dt-bindings/interrupt-controller/irq.h>
+ #include <dt-bindings/spmi/spmi.h>
+ 
+@@ -199,6 +200,28 @@
+ 			status = "disabled";
+ 		};
+ 
++		pmi8950_flash: flash-led@d300 {
++			compatible = "qcom,spmi-flash-led";
++			reg = <0xd300>;
++			status = "disabled";
++
++			flash_led: flash {
++				function = LED_FUNCTION_FLASH;
++				color = <LED_COLOR_ID_WHITE>;
++				led-sources = <1>;
++				led-max-microamp = <300000>;
++				flash-max-microamp = <1000000>;
++				flash-max-timeout-us = <1280000>;
++			};
++
++			torch_led: torch {
++				function = LED_FUNCTION_TORCH;
++				color = <LED_COLOR_ID_WHITE>;
++				led-sources = <2>;
++				led-max-microamp = <200000>;
++			};
++		};
++
+ 		pmi8950_wled: leds@d800 {
+ 			compatible = "qcom,pmi8950-wled";
+ 			reg = <0xd800>, <0xd900>;
+--- a/drivers/gpu/drm/msm/dsi/dsi_manager.c
++++ b/drivers/gpu/drm/msm/dsi/dsi_manager.c
+@@ -480,6 +480,9 @@
+ 		return ret;
+ 
+ 	connector = drm_bridge_connector_init(dev, encoder);
++	if (!IS_ERR(connector))
++		drm_connector_set_panel_orientation(connector,
++				DRM_MODE_PANEL_ORIENTATION_BOTTOM_UP);
+ 	if (IS_ERR(connector)) {
+ 		DRM_ERROR("Unable to create bridge connector\n");
+ 		return PTR_ERR(connector);
+--- a/drivers/input/rmi4/rmi_f12.c
++++ b/drivers/input/rmi4/rmi_f12.c
+@@ -2,6 +2,7 @@
+ /*
+  * Copyright (c) 2012-2016 Synaptics Incorporated
+  */
++#include <linux/of.h>
+ #include <linux/input.h>
+ #include <linux/input/mt.h>
+ #include <linux/rmi.h>
+@@ -413,7 +414,7 @@
+ 
+ 	f12->has_dribble = !!(buf & BIT(3));
+ 
+-	if (fn->dev.of_node) {
++	if (fn->rmi_dev->dev.of_node) {
+ 		ret = rmi_2d_sensor_of_probe(&fn->dev, &f12->sensor_pdata);
+ 		if (ret)
+ 			return ret;
+@@ -435,6 +436,12 @@
+ 	}
+ 	sensor->pkt_size = pkt_size;
+ 
++	if (fn->rmi_dev->dev.of_node) {
++		f12->sensor_pdata.axis_align.flip_x =
++			of_property_read_bool(fn->rmi_dev->dev.of_node, "syna,flip-x");
++		f12->sensor_pdata.axis_align.flip_y =
++			of_property_read_bool(fn->rmi_dev->dev.of_node, "syna,flip-y");
++	}
+ 	sensor->axis_align = f12->sensor_pdata.axis_align;
+ 
+ 	sensor->x_mm = f12->sensor_pdata.x_mm;
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -257,6 +257,13 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called cyttsp_i2c.
+ 
++config TOUCHSCREEN_CYTTSP_BUTTON
++	tristate "Cypress capacitive button (cyttsp-button)"
++	depends on I2C
++	help
++	  Minimal driver for the Cypress capacitive button controller found on
++	  some Vivo phones (PD1602/PD1619).
++
+ config TOUCHSCREEN_CYTTSP_SPI
+ 	tristate "support SPI bus connection"
+ 	depends on TOUCHSCREEN_CYTTSP_CORE && SPI_MASTER
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -27,6 +27,7 @@
+ obj-$(CONFIG_TOUCHSCREEN_CY8CTMG110)	+= cy8ctmg110_ts.o
+ obj-$(CONFIG_TOUCHSCREEN_CYTTSP_CORE)	+= cyttsp_core.o
+ obj-$(CONFIG_TOUCHSCREEN_CYTTSP_I2C)	+= cyttsp_i2c.o
++obj-$(CONFIG_TOUCHSCREEN_CYTTSP_BUTTON)	+= cyttsp_button.o
+ obj-$(CONFIG_TOUCHSCREEN_CYTTSP_SPI)	+= cyttsp_spi.o
+ obj-$(CONFIG_TOUCHSCREEN_CYTTSP5)	+= cyttsp5.o
+ obj-$(CONFIG_TOUCHSCREEN_DA9034)	+= da9034-ts.o
+--- a/drivers/gpu/drm/panel/msm8956-generated/Kconfig
++++ b/drivers/gpu/drm/panel/msm8956-generated/Kconfig
+@@ -37,4 +37,8 @@
+ 	tristate "Xiaomi KENZO R63315 SHARP"
+ 	default DRM_PANEL_MSM8956_GENERATED
+ 
++config DRM_PANEL_VIVO_D8064T
++	tristate "Vivo X7 d8064t"
++	default DRM_PANEL_MSM8956_GENERATED
++
+ endmenu
+--- a/drivers/gpu/drm/panel/msm8956-generated/Makefile
++++ b/drivers/gpu/drm/panel/msm8956-generated/Makefile
+@@ -6,3 +6,4 @@
+ obj-$(CONFIG_DRM_PANEL_XIAOMI_KENZO_NT35532_BOE) += panel-xiaomi-kenzo-nt35532-boe.o
+ obj-$(CONFIG_DRM_PANEL_XIAOMI_KENZO_NT35596_TIANMA) += panel-xiaomi-kenzo-nt35596-tianma.o
+ obj-$(CONFIG_DRM_PANEL_XIAOMI_KENZO_R63315_SHARP) += panel-xiaomi-kenzo-r63315-sharp.o
++obj-$(CONFIG_DRM_PANEL_VIVO_D8064T) += panel-vivo-d8064t.o
+--- a/arch/arm64/boot/dts/qcom/msm8976-vivo-pd1602.dts
++++ b/arch/arm64/boot/dts/qcom/msm8976-vivo-pd1602.dts
+@@ -0,0 +1,765 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2026, Vivo X7 (PD1602) mainline port
++ *
++ * Based on msm8976-longcheer-l9360.dts by André Apitzsch
++ */
++
++/dts-v1/;
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/leds/common.h>
++#include <dt-bindings/soc/qcom,apr.h>
++#include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
++
++#include "msm8976.dtsi"
++#include "pm8004.dtsi"
++#include "pm8950.dtsi"
++#include "pmi8950.dtsi"
++
++/ {
++	model = "Vivo X7 (PD1602)";
++	compatible = "vivo,pd1602", "qcom,msm8976";
++	chassis-type = "handset";
++
++	/*
++	 * Bootloader-only QCOM board identification, consumed by the CDT
++	 * (lk2nd) bootloader to select/boot this DTB. Values copied from the
++	 * stock X7 PD1602 boot image dtb. Ignored by the mainline kernel.
++	 */
++	qcom,msm-id = <0x116 0x10001>;
++	qcom,board-id = <0x01 0x08>;
++
++	aliases {
++		serial0 = &blsp1_uart2; /* debug console (UART DM @ 0x78b0000, GPIO4/5) */
++		mmc0 = &sdhc_1; /* SDC1 eMMC slot */
++		mmc1 = &sdhc_2; /* SDC2 SD card slot */
++	};
++
++	/*
++	 * APSS watchdog is armed by the stock bootloader. Without a driver
++	 * petting it, the phone hard-resets a few seconds after boot.
++	 */
++	sleep_clk: sleep-clk {
++		compatible = "fixed-clock";
++		#clock-cells = <0>;
++		clock-frequency = <32768>;
++	};
++
++	
++
++	chosen {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		framebuffer0: framebuffer@83200000 {
++			compatible = "simple-framebuffer";
++			reg = <0x0 0x83200000 0x0 (1080 * 1920 * 3)>;
++			width = <1080>;
++			height = <1920>;
++			stride = <(1080 * 3)>;
++			format = "r8g8b8";
++
++			power-domains = <&gcc MDSS_GDSC>;
++
++			clocks = <&gcc GCC_MDSS_AHB_CLK>,
++				 <&gcc GCC_MDSS_AXI_CLK>,
++				 <&gcc GCC_MDSS_VSYNC_CLK>,
++				 <&gcc GCC_MDSS_MDP_CLK>,
++				 <&gcc GCC_MDSS_BYTE0_CLK>,
++				 <&gcc GCC_MDSS_PCLK0_CLK>,
++				 <&gcc GCC_MDSS_ESC0_CLK>;
++
++			status = "disabled";
++		};
++	};
++
++	vibrator {
++		compatible = "gpio-vibrator";
++		enable-gpios = <&tlmm 12 GPIO_ACTIVE_HIGH>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&vibrator_default>;
++	};
++
++	gpio-keys {
++		compatible = "gpio-keys";
++		input-name = "gpio-keys";
++
++		pinctrl-0 = <&volume_up_default>, <&home_key_default>;
++		pinctrl-names = "default";
++
++		key-volume-up {
++			label = "volume_up";
++			gpios = <&tlmm 113 GPIO_ACTIVE_LOW>;
++			linux,input-type = <1>;
++			linux,code = <KEY_VOLUMEUP>;
++			gpio-key,wakeup;
++			debounce-interval = <15>;
++		};
++
++		key-home {
++			label = "home";
++			gpios = <&tlmm 144 GPIO_ACTIVE_LOW>;
++			linux,input-type = <1>;
++			linux,code = <KEY_HOME>;
++			gpio-key,wakeup;
++			debounce-interval = <50>;
++		};
++	};
++
++	reg_ts_vdd: regulator-vdd-ts {
++		compatible = "regulator-fixed";
++		regulator-name = "regulator-vdd-ts";
++		regulator-always-on;
++		regulator-boot-on;
++
++		gpio = <&tlmm 27 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++	};
++
++	reserved-memory {
++		framebuffer@83000000 {
++			reg = <0x0 0x83000000 0x0 0x2800000>;
++		};
++	};
++
++	battery: battery {
++		compatible = "simple-battery";
++		voltage-min-design-microvolt = <3200000>;
++		voltage-max-design-microvolt = <4400000>;
++		charge-full-design-microamp-hours = <3000000>;
++		constant-charge-current-max-microamp = <2000000>;
++		constant-charge-voltage-max-microvolt = <4380000>;
++		precharge-current-microamp = <200000>;
++		termination-current-microamp = <100000>;
++	};
++
++	usbphy_1p2: regulator-usbphy-1p2 {
++		compatible = "regulator-fixed";
++		regulator-name = "usbphy-1p2";
++		regulator-always-on;
++		regulator-boot-on;
++		regulator-min-microvolt = <1200000>;
++		regulator-max-microvolt = <1200000>;
++		vin-supply = <&vph_pwr>;
++	};
++
++	usb_vbus: extcon-usb-dummy {
++		compatible = "linux,extcon-usb-dummy";
++	};
++
++	vph_pwr: regulator-vph-pwr {
++		compatible = "regulator-fixed";
++		regulator-name = "vph-pwr";
++		regulator-always-on;
++		regulator-boot-on;
++	};
++};
++
++&adreno_gpu {
++	status = "okay";
++};
++
++&soc {
++	watchdog@b017000 {
++		compatible = "qcom,kpss-wdt";
++		reg = <0xb017000 0x1000>;
++		clocks = <&sleep_clk>;
++		interrupts = <GIC_SPI 3 IRQ_TYPE_EDGE_RISING>;
++		timeout-sec = <20>;
++	};
++};
++
++&tlmm {
++	touch_default: touch-default-state {
++		pins = "gpio65";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++};
++
++/* blsp1_i2c5 removed or not present in this dtsi */
++
++&blsp1_i2c2 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++
++	cyttsp_i2c@28 {
++		compatible = "cyttsp,cyttsp-button";
++		reg = <0x28>;
++
++		interrupt-parent = <&tlmm>;
++		interrupts = <69 IRQ_TYPE_EDGE_FALLING>;
++
++		vcc_i2c-supply = <&pm8950_l5>;
++
++		cyttsp,irqflags = <2>;
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&cyttsp_int_default>;
++
++		cyttsp,button-status-reg = <0x4a>;
++		cyttsp,key-num = <3>;
++		cyttsp,key-codes = <172 158 580>;
++	};
++};
++
++&blsp1_i2c4 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++	touchscreen@20 {
++		reg = <0x20>;
++		compatible = "syna,rmi4-i2c";
++
++		interrupts-extended = <&tlmm 65 IRQ_TYPE_EDGE_FALLING>;
++
++		pinctrl-0 = <&ts_int_default>, <&ts_reset_default>;
++		pinctrl-1 = <&ts_int_sleep>, <&ts_reset_sleep>;
++		pinctrl-names = "default", "sleep";
++
++		vdd-supply = <&pm8950_l6>;
++		vio-supply = <&reg_ts_vdd>;
++
++		reset-gpios = <&tlmm 64 GPIO_ACTIVE_LOW>;
++
++		syna,reset-delay-ms = <200>;
++		syna,startup-delay-ms = <200>;
++
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		rmi4-f01@1 {
++			reg = <0x1>;
++			syna,nosleep-mode = <1>;
++		};
++
++		rmi4-f12@12 {
++			reg = <0x12>;
++			syna,sensor-type = <1>;
++		};
++
++		rmi4-f1a@1a {
++			reg = <0x1a>;
++			/* Capacitive keys, left to right: menu, home, back */
++			linux,keycodes = <KEY_MENU KEY_HOME KEY_BACK>;
++		};
++	};
++};
++
++&blsp2_i2c2 {
++	status = "okay";
++	clock-frequency = <400000>;
++
++	led-controller@30 {
++		compatible = "kinetic,ktd2026";
++		reg = <0x30>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		vin-supply = <&vph_pwr>;
++		vio-supply = <&pm8950_l5>;
++
++		led@0 {
++			reg = <0>;
++			label = "kbd-backlight";
++			function = LED_FUNCTION_KBD_BACKLIGHT;
++			color = <LED_COLOR_ID_WHITE>;
++		};
++
++		led@1 {
++			reg = <1>;
++			label = "green";
++			color = <LED_COLOR_ID_GREEN>;
++		};
++
++		led@2 {
++			reg = <2>;
++			label = "red";
++			color = <LED_COLOR_ID_RED>;
++		};
++	};
++};
++
++&wcnss {
++	status = "okay";
++	firmware-name = "wcnss.mdt";
++
++	pinctrl-names = "default";
++	pinctrl-0 = <&wcss_wlan_default>;
++};
++
++&wcnss_iris {
++	compatible = "qcom,wcn3680";
++
++	vddxo-supply = <&pm8950_l7>;
++	vddrfa-supply = <&pm8950_l19>;
++	vddpa-supply = <&pm8950_l9>;
++	vdddig-supply = <&pm8950_l5>;
++};
++
++&blsp2_i2c4 {
++	status = "okay";
++	clock-frequency = <400000>;
++};
++
++/* Fingerprint / SPI related - add if needed later based on logs */
++
++
++&blsp1_uart2 {
++	status = "okay";
++	pinctrl-names = "default", "sleep";
++	pinctrl-0 = <&blsp1_uart2_default>;
++	pinctrl-1 = <&blsp1_uart2_sleep>;
++};
++
++&gcc {
++	vdd_gfx-supply = <&pm8004_s5>;
++};
++
++&mdss {
++	status = "okay";
++};
++
++&mdss_dsi0 {
++	vdd-supply = <&pm8950_l17>;
++	vdda-supply = <&pm8950_l1>;
++	vddio-supply = <&pm8950_l6>;
++
++	pinctrl-0 = <&mdss_default>;
++	pinctrl-1 = <&mdss_sleep>;
++	pinctrl-names = "default", "sleep";
++
++	status = "okay";
++
++	panel@0 {
++		compatible = "mdss,d8064t";
++		reg = <0>;
++
++
++		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++
++		vsp-supply = <&lab>;
++		vsn-supply = <&ibb>;
++
++		port {
++			panel_in: endpoint {
++				remote-endpoint = <&mdss_dsi0_out>;
++			};
++		};
++	};
++};
++
++&mdss_dsi0_out {
++	data-lanes = <0 1 2 3>;
++	remote-endpoint = <&panel_in>;
++};
++
++&mdss_dsi0_phy {
++	vddio-supply = <&pm8950_l6>;
++	status = "okay";
++};
++
++&pmi8950_smbcharger {
++	status = "okay";
++	monitored-battery = <&battery>;
++};
++
++
++&pmi8950_fg {
++	status = "okay";
++	power-supplies = <&pmi8950_smbcharger>;
++};
++
++&lab {
++	regulator-min-microvolt = <4600000>;
++	regulator-max-microvolt = <6000000>;
++};
++
++&ibb {
++	regulator-min-microvolt = <4600000>;
++	regulator-max-microvolt = <6000000>;
++};
++
++&otg {
++	extcon = <&usb_vbus>, <0>;
++	dr_mode = "otg";
++	usb-role-switch;
++	status = "okay";
++};
++
++&pm8004_spmi_regulators {
++	vdd_s2-supply = <&vph_pwr>;
++	vdd_s5-supply = <&vph_pwr>;
++
++	/* Cluster 1 supply */
++	pm8004_s2: s2 {
++		regulator-min-microvolt = <950000>;
++		regulator-max-microvolt = <1165000>;
++		regulator-name = "vdd_apc1";
++		regulator-always-on;
++		regulator-boot-on;
++	};
++
++	pm8004_s5: s5 {
++		regulator-min-microvolt = <950000>;
++		regulator-max-microvolt = <1165000>;
++		regulator-enable-ramp-delay = <500>;
++		regulator-name = "vdd_gfx";
++		regulator-always-on;
++	};
++};
++
++&pm8950_resin {
++	linux,code = <KEY_VOLUMEDOWN>;
++	status = "okay";
++};
++
++&pm8950_spmi_regulators {
++	vdd_s5-supply = <&vph_pwr>;
++
++	/* Cluster 0 supply */
++	pm8950_spmi_s5: s5 {
++		regulator-min-microvolt = <950000>;
++		regulator-max-microvolt = <1165000>;
++		regulator-name = "vdd_apc0";
++		regulator-always-on;
++		regulator-boot-on;
++	};
++};
++
++&rpm_requests {
++	pm8950_regulators: regulators {
++		compatible = "qcom,rpm-pm8950-regulators";
++
++		vdd_s1-supply = <&vph_pwr>;
++		vdd_s2-supply = <&vph_pwr>;
++		vdd_s3-supply = <&vph_pwr>;
++		vdd_s4-supply = <&vph_pwr>;
++		vdd_s6-supply = <&vph_pwr>;
++		vdd_l1_l19-supply = <&pm8950_s3>;
++		vdd_l2_l23-supply = <&pm8950_s3>;
++		vdd_l3-supply = <&pm8950_s3>;
++		vdd_l5_l6_l7_l16-supply = <&pm8950_s4>;
++		vdd_l8_l11_l12_l17_l22-supply = <&vph_pwr>;
++
++		pm8950_s1: s1 {
++			regulator-min-microvolt = <1000000>;
++			regulator-max-microvolt = <1162500>;
++		};
++
++		pm8950_s3: s3 {
++			regulator-min-microvolt = <1325000>;
++			regulator-max-microvolt = <1325000>;
++		};
++
++		pm8950_s4: s4 {
++			regulator-min-microvolt = <2050000>;
++			regulator-max-microvolt = <2050000>;
++		};
++
++		pm8950_l1: l1 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++		};
++
++		pm8950_l2: l2 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++		};
++
++		pm8950_l3: l3 {
++			regulator-min-microvolt = <1000000>;
++			regulator-max-microvolt = <1100000>;
++		};
++
++		pm8950_l5: l5 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++		};
++
++		pm8950_l6: l6 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++			regulator-always-on;
++			regulator-boot-on;
++		};
++
++		pm8950_l7: l7 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++		};
++
++		pm8950_l8: l8 {
++			regulator-min-microvolt = <2900000>;
++			regulator-max-microvolt = <2900000>;
++		};
++
++		pm8950_l9: l9 {
++			regulator-min-microvolt = <3000000>;
++			regulator-max-microvolt = <3300000>;
++		};
++
++		pm8950_l10: l10 {
++			regulator-min-microvolt = <2800000>;
++			regulator-max-microvolt = <2800000>;
++		};
++
++		pm8950_l11: l11 {
++			regulator-min-microvolt = <2950000>;
++			regulator-max-microvolt = <2950000>;
++		};
++
++		pm8950_l12: l12 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <2950000>;
++		};
++
++		pm8950_l13: l13 {
++			regulator-min-microvolt = <3075000>;
++			regulator-max-microvolt = <3075000>;
++		};
++
++		pm8950_l14: l14 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <3300000>;
++		};
++
++		pm8950_l15: l15 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <3300000>;
++		};
++
++		pm8950_l16: l16 {
++			regulator-min-microvolt = <1800000>;
++			regulator-max-microvolt = <1800000>;
++		};
++
++		pm8950_l17: l17 {
++			regulator-min-microvolt = <2850000>;
++			regulator-max-microvolt = <2850000>;
++			regulator-always-on;
++			regulator-boot-on;
++		};
++
++		pm8950_l19: l19 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1350000>;
++		};
++
++		pm8950_l22: l22 {
++			regulator-min-microvolt = <2800000>;
++			regulator-max-microvolt = <2800000>;
++		};
++
++		pm8950_l23: l23 {
++			regulator-min-microvolt = <1200000>;
++			regulator-max-microvolt = <1200000>;
++		};
++	};
++};
++
++&sdhc_1 {
++	bus-width = <8>;
++	non-removable;
++	vmmc-supply = <&pm8950_l8>;
++	vqmmc-supply = <&pm8950_l5>;
++	status = "okay";
++};
++
++&sdhc_2 {
++	bus-width = <4>;
++	cd-gpios = <&tlmm 100 GPIO_ACTIVE_LOW>;
++	vmmc-supply = <&pm8950_l11>;
++	vqmmc-supply = <&pm8950_l12>;
++
++	pinctrl-0 = <&sdc2_default>, <&sdc2_cd_default>;
++	pinctrl-1 = <&sdc2_sleep>, <&sdc2_cd_sleep>;
++	pinctrl-names = "default", "sleep";
++
++	status = "okay";
++};
++
++&tlmm {
++	gpio-reserved-ranges = <0 4>, <8 4>;
++
++	blsp1_uart2_default: blsp1-uart2-default-state {
++		pins = "gpio4", "gpio5";
++		function = "blsp_uart2";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++
++	blsp1_uart2_sleep: blsp1-uart2-sleep-state {
++		pins = "gpio4", "gpio5";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	mdss_default: mdss-default-state {
++		pins = "gpio25";
++		function = "gpio";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	mdss_sleep: mdss-sleep-state {
++		pins = "gpio25";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++
++	sdc2_cd_default: sdc2-cd-default-state {
++		pins = "gpio100";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	sdc2_cd_sleep: sdc2-cd-sleep-state {
++		pins = "gpio100";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	ts_int_default: ts-int-default-state {
++		pins = "gpio65";
++		function = "gpio";
++		drive-strength = <8>;
++		bias-pull-up;
++	};
++
++	ts_int_sleep: ts-int-sleep-state {
++		pins = "gpio65";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	ts_reset_default: ts-reset-state {
++		pins = "gpio64";
++		function = "gpio";
++		drive-strength = <8>;
++		bias-pull-up;
++	};
++
++	ts_reset_sleep: ts-sleep-state {
++		pins = "gpio64";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	vibrator_default: vibrator-default-state {
++		pins = "gpio12";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	cyttsp_vdd_hog: cyttsp-vdd-hog {
++		gpio-hog;
++		gpios = <142 GPIO_ACTIVE_HIGH>;
++		output-high;
++	};
++
++	cyttsp_int_default: cyttsp-int-default-state {
++		pins = "gpio69";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	wcss_wlan_default: wcss-wlan-default-state {
++		pins = "gpio40", "gpio41", "gpio42", "gpio43", "gpio44";
++		function = "wcss_wlan";
++		drive-strength = <6>;
++		bias-pull-up;
++	};
++
++	home_key_default: home-key-default-state {
++		pins = "gpio144";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++
++	volume_up_default: volume-up-default-state {
++		pins = "gpio113";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-up;
++	};
++};
++
++&usb_hs_phy_8916 {
++	v1p8-supply = <&pm8950_l7>;
++	v3p3-supply = <&pm8950_l13>;
++	extcon = <&usb_vbus>;
++	status = "okay";
++};
++
++&xo_board {
++	clock-frequency = <19200000>;
++};
++
++&soc {
++	lpass: remoteproc@c200000 {
++		compatible = "qcom,msm8953-adsp-pil";
++		reg = <0x0c200000 0x100>;
++
++		interrupts-extended = <&intc GIC_SPI 293 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
++		interrupt-names = "wdog", "fatal", "ready", "handover", "stop-ack";
++
++		clocks = <&rpmcc RPM_SMD_XO_CLK_SRC>;
++		clock-names = "xo";
++
++		power-domains = <&rpmpd RPMPD_VDDCX>;
++		power-domain-names = "cx";
++
++		memory-region = <&lpass_mem>;
++
++		qcom,smem-states = <&adsp_smp2p_out 0>;
++		qcom,smem-state-names = "stop";
++
++		status = "okay";
++
++		smd-edge {
++			interrupts = <GIC_SPI 289 IRQ_TYPE_EDGE_RISING>;
++
++			label = "lpass";
++			mboxes = <&apcs 8>;
++			qcom,smd-edge = <1>;
++			qcom,remote-pid = <2>;
++
++			apr {
++				compatible = "qcom,apr-v2";
++				qcom,smd-channels = "apr_audio_svc";
++				qcom,domain = <APR_DOMAIN_ADSP>;
++				#address-cells = <1>;
++				#size-cells = <0>;
++
++				q6core: service@3 {
++					compatible = "qcom,q6core";
++					reg = <APR_SVC_ADSP_CORE>;
++				};
++
++				q6afe: service@4 {
++					compatible = "qcom,q6afe";
++					reg = <APR_SVC_AFE>;
++				};
++			};
++		};
++	};
++};
+--- a/drivers/input/touchscreen/cyttsp_button.c
++++ b/drivers/input/touchscreen/cyttsp_button.c
+@@ -0,0 +1,271 @@
++// SPDX-License-Identifier: GPL-2.0
++/* Minimal Cypress capacitive button driver for Vivo PD1619. */
++
++#include <linux/delay.h>
++#include <linux/i2c.h>
++#include <linux/input.h>
++#include <linux/interrupt.h>
++#include <linux/module.h>
++#include <linux/mutex.h>
++#include <linux/of.h>
++#include <linux/regulator/consumer.h>
++#include <linux/slab.h>
++
++#define CYTTSP_MAX_KEYS 8
++
++struct cyttsp_button {
++	struct i2c_client *client;
++	struct input_dev *input;
++	struct regulator *vcc_i2c;
++	struct mutex io_lock;
++	u32 keycodes[CYTTSP_MAX_KEYS];
++	u32 key_count;
++	u32 irq_flags;
++	u8 status_reg;
++	u8 last_status;
++	bool regulator_enabled;
++	bool suspended;
++};
++
++static int cyttsp_button_read_reg(struct cyttsp_button *button, u8 reg,
++		u8 *value)
++{
++	int ret;
++
++	mutex_lock(&button->io_lock);
++	ret = i2c_master_send(button->client, &reg, 1);
++	if (ret == 1)
++		ret = i2c_master_recv(button->client, value, 1);
++	mutex_unlock(&button->io_lock);
++
++	if (ret == 1)
++		return 0;
++	return ret < 0 ? ret : -EIO;
++}
++
++static int cyttsp_button_set_power(struct cyttsp_button *button, bool on)
++{
++	int ret;
++
++	if (on && !button->regulator_enabled) {
++		ret = regulator_enable(button->vcc_i2c);
++		if (ret)
++			return ret;
++		button->regulator_enabled = true;
++	}
++
++	if (!on && button->regulator_enabled) {
++		regulator_disable(button->vcc_i2c);
++		button->regulator_enabled = false;
++	}
++
++	return 0;
++}
++
++static irqreturn_t cyttsp_button_irq(int irq, void *data)
++{
++	struct cyttsp_button *button = data;
++	u8 changed;
++	u8 status;
++	int i;
++
++	if (button->suspended)
++		return IRQ_HANDLED;
++
++	if (cyttsp_button_read_reg(button, button->status_reg, &status))
++		return IRQ_HANDLED;
++
++	changed = status ^ button->last_status;
++	for (i = 0; i < button->key_count; i++) {
++		if (!(changed & BIT(i)))
++			continue;
++		input_report_key(button->input, button->keycodes[i],
++				!!(status & BIT(i)));
++	}
++	if (changed)
++		input_sync(button->input);
++	button->last_status = status;
++
++	return IRQ_HANDLED;
++}
++
++static int cyttsp_button_parse_dt(struct device *dev,
++		struct cyttsp_button *button)
++{
++	struct device_node *np = dev->of_node;
++	u32 value;
++	int ret;
++
++	ret = of_property_read_u32(np, "cyttsp,irqflags", &button->irq_flags);
++	if (ret)
++		return ret;
++
++	ret = of_property_read_u32(np, "cyttsp,button-status-reg", &value);
++	if (ret)
++		return ret;
++	button->status_reg = value;
++
++	ret = of_property_read_u32(np, "cyttsp,key-num", &button->key_count);
++	if (ret || !button->key_count || button->key_count > CYTTSP_MAX_KEYS)
++		return -EINVAL;
++
++	return of_property_read_u32_array(np, "cyttsp,key-codes",
++			button->keycodes, button->key_count);
++}
++
++static int cyttsp_button_probe(struct i2c_client *client)
++{
++	struct cyttsp_button *button;
++	int ret;
++	int i;
++
++	if (!client->dev.of_node)
++		return -ENODEV;
++
++	button = devm_kzalloc(&client->dev, sizeof(*button), GFP_KERNEL);
++	if (!button)
++		return -ENOMEM;
++	button->client = client;
++	mutex_init(&button->io_lock);
++
++	ret = cyttsp_button_parse_dt(&client->dev, button);
++	if (ret)
++		return ret;
++
++	button->vcc_i2c = devm_regulator_get(&client->dev, "vcc_i2c");
++	if (IS_ERR(button->vcc_i2c))
++		return PTR_ERR(button->vcc_i2c);
++
++	ret = cyttsp_button_set_power(button, true);
++	if (ret)
++		return ret;
++	msleep(110);
++
++	button->input = input_allocate_device();
++	if (!button->input) {
++		ret = -ENOMEM;
++		goto err_power_off;
++	}
++	button->input->name = "vivo_virtual_key";
++	button->input->id.bustype = BUS_I2C;
++	button->input->dev.parent = &client->dev;
++	for (i = 0; i < button->key_count; i++)
++		input_set_capability(button->input, EV_KEY, button->keycodes[i]);
++
++	ret = input_register_device(button->input);
++	if (ret)
++		goto err_free_input;
++
++	if (client->irq <= 0) {
++		ret = -EINVAL;
++		goto err_unregister_input;
++	}
++
++	ret = devm_request_threaded_irq(&client->dev, client->irq, NULL,
++			cyttsp_button_irq, button->irq_flags | IRQF_ONESHOT,
++			dev_name(&client->dev), button);
++	if (ret)
++		goto err_unregister_input;
++
++	i2c_set_clientdata(client, button);
++	dev_info(&client->dev, "registered %u capacitive keys\n",
++			button->key_count);
++	return 0;
++
++err_unregister_input:
++	input_unregister_device(button->input);
++	button->input = NULL;
++	goto err_power_off;
++err_free_input:
++	input_free_device(button->input);
++	button->input = NULL;
++err_power_off:
++	cyttsp_button_set_power(button, false);
++	return ret;
++}
++
++static void cyttsp_button_remove(struct i2c_client *client)
++{
++	struct cyttsp_button *button = i2c_get_clientdata(client);
++
++	input_unregister_device(button->input);
++	button->input = NULL;
++	cyttsp_button_set_power(button, false);
++}
++
++static void cyttsp_button_shutdown(struct i2c_client *client)
++{
++	struct cyttsp_button *button = i2c_get_clientdata(client);
++
++	if (button)
++		cyttsp_button_set_power(button, false);
++}
++
++#ifdef CONFIG_PM_SLEEP
++static int cyttsp_button_suspend(struct device *dev)
++{
++	struct i2c_client *client = to_i2c_client(dev);
++	struct cyttsp_button *button = i2c_get_clientdata(client);
++
++	button->suspended = true;
++	disable_irq(client->irq);
++	cyttsp_button_set_power(button, false);
++	return 0;
++}
++
++static int cyttsp_button_resume(struct device *dev)
++{
++	struct i2c_client *client = to_i2c_client(dev);
++	struct cyttsp_button *button = i2c_get_clientdata(client);
++
++	cyttsp_button_set_power(button, true);
++	msleep(110);
++	cyttsp_button_read_reg(button, button->status_reg, &button->last_status);
++	button->suspended = false;
++	enable_irq(client->irq);
++	return 0;
++}
++#endif
++
++static SIMPLE_DEV_PM_OPS(cyttsp_button_pm_ops, cyttsp_button_suspend,
++		cyttsp_button_resume);
++
++static const struct of_device_id cyttsp_button_of_match[] = {
++	{ .compatible = "cyttsp,cyttsp-button" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, cyttsp_button_of_match);
++
++static const struct i2c_device_id cyttsp_button_id[] = {
++	{ "cyttsp-button", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, cyttsp_button_id);
++
++static struct i2c_driver cyttsp_button_driver = {
++	.driver = {
++		.name = "cyttsp-button",
++		.owner = THIS_MODULE,
++		.of_match_table = cyttsp_button_of_match,
++		.pm = &cyttsp_button_pm_ops,
++	},
++	.probe = cyttsp_button_probe,
++	.remove = cyttsp_button_remove,
++	.shutdown = cyttsp_button_shutdown,
++	.id_table = cyttsp_button_id,
++};
++
++static int __init cyttsp_button_init(void)
++{
++	return i2c_add_driver(&cyttsp_button_driver);
++}
++late_initcall(cyttsp_button_init);
++
++static void __exit cyttsp_button_exit(void)
++{
++	i2c_del_driver(&cyttsp_button_driver);
++}
++module_exit(cyttsp_button_exit);
++
++MODULE_DESCRIPTION("Cypress capacitive button driver for Vivo PD1619");
++MODULE_LICENSE("GPL v2");
+--- a/drivers/gpu/drm/panel/msm8956-generated/panel-vivo-d8064t.c
++++ b/drivers/gpu/drm/panel/msm8956-generated/panel-vivo-d8064t.c
+@@ -0,0 +1,299 @@
++// SPDX-License-Identifier: GPL-2.0-only
++// Copyright (c) 2026 Vivo X7 mainline port
++// Generated with linux-mdss-dsi-panel-driver-generator from vendor device tree:
++//   Copyright (c) 2013, The Linux Foundation
++
++#include <linux/backlight.h>
++#include <linux/delay.h>
++#include <linux/gpio/consumer.h>
++#include <linux/mod_devicetable.h>
++#include <linux/module.h>
++#include <linux/regulator/consumer.h>
++
++#include <video/mipi_display.h>
++
++#include <drm/drm_mipi_dsi.h>
++#include <drm/drm_modes.h>
++#include <drm/drm_panel.h>
++#include <drm/drm_probe_helper.h>
++
++struct d8064t {
++	struct drm_panel panel;
++	struct mipi_dsi_device *dsi;
++	struct gpio_desc *reset_gpio;
++	struct regulator_bulk_data *supplies;
++};
++
++static inline struct d8064t *to_d8064t(struct drm_panel *panel)
++{
++	return container_of_const(panel, struct d8064t, panel);
++}
++
++static const struct regulator_bulk_data d8064t_supplies[] = {
++	{ .supply = "vsn" },
++	{ .supply = "vsp" },
++};
++
++static void d8064t_reset(struct d8064t *ctx)
++{
++	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
++	usleep_range(5000, 6000);
++	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
++	usleep_range(5000, 6000);
++	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
++	usleep_range(10000, 11000);
++}
++
++static int d8064t_on(struct d8064t *ctx)
++{
++	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
++
++	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
++
++	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
++	mipi_dsi_msleep(&dsi_ctx, 32);
++	/* 180 degree rotation: MX | MY */
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_SET_ADDRESS_MODE, 0xc0);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0x5a, 0x5a);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x01);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd2, 0x20);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0xa5, 0xa5);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x5a, 0x5a);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0x5a, 0x5a);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xcc, 0x54, 0x4a);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb0, 0x06);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xff, 0x02);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0xa5, 0xa5);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0xa5, 0xa5);
++	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0x5a, 0x5a);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf4, 0x00, 0x01);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfc, 0xa5, 0xa5);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_CONTROL_DISPLAY,
++				     0x20);
++	mipi_dsi_msleep(&dsi_ctx, 90);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_WRITE_POWER_SAVE, 0x00);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x57, 0x40);
++	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
++
++	return dsi_ctx.accum_err;
++}
++
++static int d8064t_off(struct d8064t *ctx)
++{
++	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
++
++	ctx->dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
++
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x28, 0x00);
++	mipi_dsi_msleep(&dsi_ctx, 50);
++	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x10, 0x00);
++	mipi_dsi_msleep(&dsi_ctx, 150);
++
++	return dsi_ctx.accum_err;
++}
++
++static int d8064t_prepare(struct drm_panel *panel)
++{
++	struct d8064t *ctx = to_d8064t(panel);
++	struct device *dev = &ctx->dsi->dev;
++	int ret;
++
++	ret = regulator_bulk_enable(ARRAY_SIZE(d8064t_supplies), ctx->supplies);
++	if (ret < 0) {
++		dev_err(dev, "Failed to enable regulators: %d\n", ret);
++		return ret;
++	}
++
++	d8064t_reset(ctx);
++
++	ret = d8064t_on(ctx);
++	if (ret < 0) {
++		dev_err(dev, "Failed to initialize panel: %d\n", ret);
++		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
++		regulator_bulk_disable(ARRAY_SIZE(d8064t_supplies), ctx->supplies);
++		return ret;
++	}
++
++	return 0;
++}
++
++static int d8064t_unprepare(struct drm_panel *panel)
++{
++	struct d8064t *ctx = to_d8064t(panel);
++	struct device *dev = &ctx->dsi->dev;
++	int ret;
++
++	ret = d8064t_off(ctx);
++	if (ret < 0)
++		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
++
++	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
++	regulator_bulk_disable(ARRAY_SIZE(d8064t_supplies), ctx->supplies);
++
++	return 0;
++}
++
++static const struct drm_display_mode d8064t_mode = {
++	.clock = (1080 + 80 + 8 + 158) * (1920 + 30 + 2 + 40) * 60 / 1000,
++	.hdisplay = 1080,
++	.hsync_start = 1080 + 80,
++	.hsync_end = 1080 + 80 + 8,
++	.htotal = 1080 + 80 + 8 + 158,
++	.vdisplay = 1920,
++	.vsync_start = 1920 + 30,
++	.vsync_end = 1920 + 30 + 2,
++	.vtotal = 1920 + 30 + 2 + 40,
++	.width_mm = 64,
++	.height_mm = 115,
++	.type = DRM_MODE_TYPE_DRIVER,
++};
++
++static int d8064t_get_modes(struct drm_panel *panel,
++			    struct drm_connector *connector)
++{
++	return drm_connector_helper_get_modes_fixed(connector, &d8064t_mode);
++}
++
++static const struct drm_panel_funcs d8064t_panel_funcs = {
++	.prepare = d8064t_prepare,
++	.unprepare = d8064t_unprepare,
++	.get_modes = d8064t_get_modes,
++};
++
++static int d8064t_bl_update_status(struct backlight_device *bl)
++{
++	struct mipi_dsi_device *dsi = bl_get_data(bl);
++	u16 brightness = backlight_get_brightness(bl);
++	int ret;
++
++	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
++
++	ret = mipi_dsi_dcs_set_display_brightness(dsi, brightness);
++	if (ret < 0)
++		return ret;
++
++	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
++
++	return 0;
++}
++
++// TODO: Check if /sys/class/backlight/.../actual_brightness actually returns
++// correct values. If not, remove this function.
++static int d8064t_bl_get_brightness(struct backlight_device *bl)
++{
++	struct mipi_dsi_device *dsi = bl_get_data(bl);
++	u16 brightness;
++	int ret;
++
++	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
++
++	ret = mipi_dsi_dcs_get_display_brightness(dsi, &brightness);
++	if (ret < 0)
++		return ret;
++
++	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
++
++	return brightness & 0xff;
++}
++
++static const struct backlight_ops d8064t_bl_ops = {
++	.update_status = d8064t_bl_update_status,
++	.get_brightness = d8064t_bl_get_brightness,
++};
++
++static struct backlight_device *
++d8064t_create_backlight(struct mipi_dsi_device *dsi)
++{
++	struct device *dev = &dsi->dev;
++	const struct backlight_properties props = {
++		.type = BACKLIGHT_RAW,
++		.brightness = 255,
++		.max_brightness = 255,
++	};
++
++	return devm_backlight_device_register(dev, dev_name(dev), dev, dsi,
++					      &d8064t_bl_ops, &props);
++}
++
++static int d8064t_probe(struct mipi_dsi_device *dsi)
++{
++	struct device *dev = &dsi->dev;
++	struct d8064t *ctx;
++	int ret;
++
++	ctx = devm_drm_panel_alloc(dev, struct d8064t, panel,
++				   &d8064t_panel_funcs,
++				   DRM_MODE_CONNECTOR_DSI);
++	if (IS_ERR(ctx))
++		return PTR_ERR(ctx);
++
++	ret = devm_regulator_bulk_get_const(dev,
++					    ARRAY_SIZE(d8064t_supplies),
++					    d8064t_supplies,
++					    &ctx->supplies);
++	if (ret < 0)
++		return ret;
++
++	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
++	if (IS_ERR(ctx->reset_gpio))
++		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
++				     "Failed to get reset-gpios\n");
++
++	ctx->dsi = dsi;
++	mipi_dsi_set_drvdata(dsi, ctx);
++
++	dsi->lanes = 4;
++	dsi->format = MIPI_DSI_FMT_RGB888;
++	dsi->mode_flags = MIPI_DSI_MODE_NO_EOT_PACKET |
++			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
++
++	ctx->panel.prepare_prev_first = true;
++
++	ctx->panel.backlight = d8064t_create_backlight(dsi);
++	if (IS_ERR(ctx->panel.backlight))
++		return dev_err_probe(dev, PTR_ERR(ctx->panel.backlight),
++				     "Failed to create backlight\n");
++
++	drm_panel_add(&ctx->panel);
++
++	ret = mipi_dsi_attach(dsi);
++	if (ret < 0) {
++		drm_panel_remove(&ctx->panel);
++		return dev_err_probe(dev, ret, "Failed to attach to DSI host\n");
++	}
++
++	return 0;
++}
++
++static void d8064t_remove(struct mipi_dsi_device *dsi)
++{
++	struct d8064t *ctx = mipi_dsi_get_drvdata(dsi);
++	int ret;
++
++	ret = mipi_dsi_detach(dsi);
++	if (ret < 0)
++		dev_err(&dsi->dev, "Failed to detach from DSI host: %d\n", ret);
++
++	drm_panel_remove(&ctx->panel);
++}
++
++static const struct of_device_id d8064t_of_match[] = {
++	{ .compatible = "mdss,d8064t" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, d8064t_of_match);
++
++static struct mipi_dsi_driver d8064t_driver = {
++	.probe = d8064t_probe,
++	.remove = d8064t_remove,
++	.driver = {
++		.name = "panel-d8064t",
++		.of_match_table = d8064t_of_match,
++	},
++};
++module_mipi_dsi_driver(d8064t_driver);
++
++MODULE_AUTHOR("Vivo X7 mainline port");
++MODULE_DESCRIPTION("DRM driver for mdss_dsi_d8064t_1080p_cmd panel");
++MODULE_LICENSE("GPL");
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -127,6 +127,7 @@
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-sony-xperia-loire-suzu.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8956-xiaomi-kenzo.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-longcheer-l9360.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= msm8976-vivo-pd1602.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-10.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-bullhead-rev-101.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= msm8992-lg-h815.dtb
